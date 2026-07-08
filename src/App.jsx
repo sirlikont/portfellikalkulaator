@@ -22,10 +22,12 @@ export default function App() {
     return amt;
   };
 
-  const cashflows = transactions.map((t) => ({
-    date: new Date(t.date),
-    value: toCashflow(t),
-  }));
+  const cashflows = transactions
+    .map((t) => ({
+      date: new Date(t.date),
+      value: toCashflow(t),
+    }))
+    .sort((a, b) => a.date - b.date);
 
   // -------------------------
   // 2. XIRR FUNKTSIOON
@@ -77,8 +79,44 @@ export default function App() {
   const xirrValue =
     cashflows.length > 1 ? xirr(cashflows) * 100 : 0;
 
+  // Kaitse absurdsete väärtuste eest
+  const safeXirrValue = Math.abs(xirrValue) > 10000 ? 0 : xirrValue;
+
   // -------------------------
-  // 3. S&P 500 (lihtne placeholder)
+  // 3. LIHTTOOTLUS ARVUTUS
+  // -------------------------
+  const start = transactions.find(t => t.type === "Algväärtus");
+  const end = transactions.find(t => t.type === "Lõppväärtus");
+
+  const startDate = start?.date || "";
+  const endDate = end?.date || "";
+
+  const deposits = transactions
+    .filter(t => t.type === "Sissemakse")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const withdrawals = transactions
+    .filter(t => t.type === "Väljamakse")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const profit =
+    (end?.amount || 0)
+    - (start?.amount || 0)
+    - deposits
+    + withdrawals;
+
+  const invested =
+    (start?.amount || 0)
+    + deposits
+    - withdrawals;
+
+  const totalReturn =
+    invested > 0
+      ? (profit / invested) * 100
+      : 0;
+
+  // -------------------------
+  // 4. S&P 500 (lihtne placeholder)
   // -------------------------
   const spReturn = 10; // hiljem API-st
 
@@ -120,7 +158,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex justify-center items-center py-10">
-      <div className="bg-white p-6 rounded-xl shadow-md w-[650px] mx-auto">
+      <div className="bg-white p-6 rounded-xl shadow-md w-[900px] mx-auto">
 
         <h1 className="text-2xl font-bold mb-4">
           Portfelli tootluskalkulaator
@@ -197,9 +235,15 @@ export default function App() {
         ))}
 
         {/* TULEMUSED */}
+        <div className="mb-6 whitespace-nowrap">
+          <span className="font-semibold text-sm">Periood: {startDate || "—"} – {endDate || "—"} | </span>
+          <span className="font-semibold text-sm">Kasum: {profit.toFixed(2)} € | </span>
+          <span className="font-semibold text-sm">Lihttootlus: {totalReturn.toFixed(2)} %</span>
+        </div>
+
         <div className="mt-6 p-4 bg-gray-100 rounded">
           <p className="font-semibold">
-            XIRR tootlus: {xirrValue.toFixed(2)} %
+            XIRR tootlus: {safeXirrValue.toFixed(2)} %
           </p>
 
           <p>
@@ -207,7 +251,7 @@ export default function App() {
           </p>
 
           <p className="font-semibold mt-1">
-            Vahe: {(xirrValue - spReturn).toFixed(2)} %
+            Vahe: {(safeXirrValue - spReturn).toFixed(2)} %
           </p>
         </div>
 
