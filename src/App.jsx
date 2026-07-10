@@ -1,4 +1,13 @@
 import { useState, useEffect } from "react";
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signOut
+} from "firebase/auth";
+import { auth } from "./firebase";
+import { db } from "./firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 export default function App() {
   const [transactions, setTransactions] = useState(() => {
@@ -13,6 +22,28 @@ export default function App() {
   const [sxr8Prices, setSxr8Prices] = useState([]);
   const [loadingSxr8, setLoadingSxr8] = useState(false);
   const [sxr8Error, setSxr8Error] = useState("");
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+
+      if (currentUser) {
+        const portfolioRef = doc(db, "users", currentUser.uid);
+        const portfolioSnap = await getDoc(portfolioRef);
+
+        if (portfolioSnap.exists()) {
+          const data = portfolioSnap.data();
+
+          setTransactions(data.transactions || []);
+
+          console.log("Portfell laaditud Firebase'ist");
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Format date to dd.mm.yyyy
   const formatDate = (dateString) => {
@@ -296,7 +327,7 @@ export default function App() {
   const sxr8Xirr = sxr8Cashflows.length > 1 ? xirr(sxr8Cashflows) * 100 : 0;
   const safeSxr8Xirr = Math.abs(sxr8Xirr) > 10000 ? 0 : sxr8Xirr;
 
-  const addTransaction = () => {
+  const addTransaction = async () => {
     if (!date || Number(amount) <= 0) return;
 
     if (
@@ -309,24 +340,65 @@ export default function App() {
 
     setError("");
 
-    setTransactions([
+    const updatedTransactions = [
       ...transactions,
       {
         date,
         type,
         amount: Number(amount),
       },
-    ]);
+    ];
+
+    setTransactions(updatedTransactions);
+
+    if (user) {
+      await savePortfolioToFirebase(updatedTransactions);
+    }
 
     setDate("");
     setAmount("");
     setType("Sissemakse");
   };
 
-  const deleteTransaction = (indexToDelete) => {
-    setTransactions(
-      transactions.filter((_, index) => index !== indexToDelete)
+  const deleteTransaction = async (indexToDelete) => {
+    const updatedTransactions = transactions.filter(
+      (_, index) => index !== indexToDelete
     );
+
+    setTransactions(updatedTransactions);
+
+    if (user) {
+      await savePortfolioToFirebase(updatedTransactions);
+    }
+  };
+
+  const handleLogout = () => {
+    signOut(auth)
+      .then(() => {
+        setUser(null);
+        setTransactions([]);
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+  };
+
+  const savePortfolioToFirebase = async (portfolioTransactions) => {
+    if (!user) return;
+
+    try {
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          transactions: portfolioTransactions,
+          updatedAt: new Date()
+        }
+      );
+
+      console.log("Portfell salvestatud Firebase'i");
+    } catch (error) {
+      console.error("Salvestamise viga:", error);
+    }
   };
 
   return (
@@ -338,6 +410,44 @@ export default function App() {
         <h1 className="text-2xl font-bold mb-4">
           Portfelli tootluskalkulaator
         </h1>
+
+        {user ? (
+          <div className="mb-4 flex items-center">
+            <span style={{ marginRight: '16px' }}>{user.displayName}</span>
+            <span className="text-sm text-gray-600" style={{ marginRight: '16px' }}>
+              {user.email}
+            </span>
+
+            <button 
+              onClick={handleLogout} 
+              className="bg-gray-500 text-white p-2 rounded"
+            >
+              Logi välja
+            </button>
+          </div>
+        ) : (
+          <div className="mb-4 flex items-center">
+            <span className="text-sm text-gray-600" style={{ marginRight: '8px' }}>
+              Kui soovid oma portfelli salvestada, siis
+            </span>
+            <button
+              onClick={() => {
+                const provider = new GoogleAuthProvider();
+
+                signInWithPopup(auth, provider)
+                  .then((result) => {
+                    setUser(result.user);
+                  })
+                  .catch((error) => {
+                    console.error(error);
+                  });
+              }}
+              className="bg-green-500 text-white p-2 rounded"
+            >
+              Logi sisse Google'iga
+            </button>
+          </div>
+        )}
 
         <h2 className="font-semibold mb-2">
           Lisa rahavoog

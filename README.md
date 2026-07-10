@@ -70,7 +70,7 @@ npm run build
 ```
 🌐 Live demo
 
-Coming soon...
+[https://sirlikont.github.io/portfellikalkulaator/](https://sirlikont.github.io/portfellikalkulaator/)
 
 
 
